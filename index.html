@@ -32,11 +32,36 @@
       text-shadow: 2px 2px 5px black;
       z-index: 1;
     }
+    #joystick {
+      position: absolute;
+      bottom: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 100px;
+      height: 100px;
+      background: rgba(255, 255, 255, 0.1);
+      border-radius: 50%;
+      touch-action: none;
+      z-index: 2;
+    }
+    #stick {
+      width: 40px;
+      height: 40px;
+      background: white;
+      border-radius: 50%;
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+    }
   </style>
 </head>
 <body>
-  <div id="score">Score: 0 | Lives: 3</div>
+  <div id="score">Puntos: 0 | Vidas: 3</div>
   <canvas id="gameCanvas"></canvas>
+  <div id="joystick">
+    <div id="stick"></div>
+  </div>
   <script>
     const canvas = document.getElementById('gameCanvas');
     const ctx = canvas.getContext('2d');
@@ -45,7 +70,6 @@
       canvas.width = window.innerWidth;
       canvas.height = window.innerHeight;
     }
-
     window.addEventListener('resize', resizeCanvas);
     resizeCanvas();
 
@@ -53,45 +77,27 @@
     let lives = 3;
     let difficultyTimer = 0;
 
-    const lloronaImg = new Image();
-    lloronaImg.src = './images/llorona.png';
-
-    const kidImg = new Image();
-    kidImg.src = './images/kid.png';
-
-    const hunterImg = new Image();
-    hunterImg.src = './images/hunter.png';
+    const lloronaImg = new Image(); lloronaImg.src = './images/llorona.png';
+    const kidImg = new Image(); kidImg.src = './images/kid.png';
+    const hunterImg = new Image(); hunterImg.src = './images/hunter.png';
 
     const llorona = {
       x: canvas.width / 2,
       y: canvas.height / 2,
       size: 30,
-      speed: 5
+      speed: 5,
+      dx: 0,
+      dy: 0
     };
 
-    const kids = [];
-    const hunters = [];
+    const kids = [], hunters = [];
 
     function spawnKid() {
-      kids.push({
-        x: Math.random() * (canvas.width - 30),
-        y: Math.random() * (canvas.height - 30),
-        size: 20,
-        dx: (Math.random() - 0.5) * 2,
-        dy: (Math.random() - 0.5) * 2
-      });
+      kids.push({ x: Math.random() * (canvas.width - 30), y: Math.random() * (canvas.height - 30), size: 20, dx: (Math.random() - 0.5) * 2, dy: (Math.random() - 0.5) * 2 });
     }
-
     function spawnHunter() {
-      hunters.push({
-        x: Math.random() * (canvas.width - 30),
-        y: Math.random() * (canvas.height - 30),
-        size: 25,
-        dx: (Math.random() - 0.5) * 2,
-        dy: (Math.random() - 0.5) * 2
-      });
+      hunters.push({ x: Math.random() * (canvas.width - 30), y: Math.random() * (canvas.height - 30), size: 25, dx: (Math.random() - 0.5) * 2, dy: (Math.random() - 0.5) * 2 });
     }
-
     for (let i = 0; i < 5; i++) spawnKid();
     for (let i = 0; i < 3; i++) spawnHunter();
 
@@ -99,11 +105,46 @@
     document.addEventListener('keydown', e => keys[e.key] = true);
     document.addEventListener('keyup', e => keys[e.key] = false);
 
+    const joystick = document.getElementById('joystick');
+    const stick = document.getElementById('stick');
+    let dragging = false;
+    let centerX, centerY;
+
+    function getCenter() {
+      const rect = joystick.getBoundingClientRect();
+      return [rect.left + rect.width / 2, rect.top + rect.height / 2];
+    }
+
+    joystick.addEventListener('touchstart', e => {
+      dragging = true;
+      [centerX, centerY] = getCenter();
+    });
+
+    joystick.addEventListener('touchmove', e => {
+      if (!dragging) return;
+      const touch = e.touches[0];
+      const dx = touch.clientX - centerX;
+      const dy = touch.clientY - centerY;
+      const dist = Math.min(Math.sqrt(dx * dx + dy * dy), 40);
+      const angle = Math.atan2(dy, dx);
+      stick.style.left = 50 + dist * Math.cos(angle) + 'px';
+      stick.style.top = 50 + dist * Math.sin(angle) + 'px';
+      llorona.dx = Math.cos(angle) * llorona.speed;
+      llorona.dy = Math.sin(angle) * llorona.speed;
+    }, { passive: false });
+
+    joystick.addEventListener('touchend', () => {
+      dragging = false;
+      stick.style.left = '50%';
+      stick.style.top = '50%';
+      llorona.dx = 0;
+      llorona.dy = 0;
+    });
+
     function moveEntities(entities) {
       for (let entity of entities) {
         entity.x += entity.dx;
         entity.y += entity.dy;
-
         if (entity.x < 0 || entity.x > canvas.width - entity.size) entity.dx *= -1;
         if (entity.y < 0 || entity.y > canvas.height - entity.size) entity.dy *= -1;
       }
@@ -114,7 +155,8 @@
       if (keys['ArrowDown']) llorona.y += llorona.speed;
       if (keys['ArrowLeft']) llorona.x -= llorona.speed;
       if (keys['ArrowRight']) llorona.x += llorona.speed;
-
+      llorona.x += llorona.dx;
+      llorona.y += llorona.dy;
       moveEntities(kids);
       moveEntities(hunters);
 
@@ -143,14 +185,8 @@
       if (difficultyTimer % 600 === 0) {
         spawnKid();
         spawnHunter();
-        for (let k of kids) {
-          k.dx *= 1.1;
-          k.dy *= 1.1;
-        }
-        for (let h of hunters) {
-          h.dx *= 1.1;
-          h.dy *= 1.1;
-        }
+        for (let k of kids) { k.dx *= 1.1; k.dy *= 1.1; }
+        for (let h of hunters) { h.dx *= 1.1; h.dy *= 1.1; }
       }
 
       document.getElementById('score').textContent = `Score: ${score} | Lives: ${lives}`;
@@ -158,16 +194,9 @@
 
     function draw() {
       ctx.clearRect(0, 0, canvas.width, canvas.height);
-
       ctx.drawImage(lloronaImg, llorona.x - llorona.size, llorona.y - llorona.size, llorona.size * 2, llorona.size * 2);
-
-      for (let kid of kids) {
-        ctx.drawImage(kidImg, kid.x - kid.size, kid.y - kid.size, kid.size * 2, kid.size * 2);
-      }
-
-      for (let hunter of hunters) {
-        ctx.drawImage(hunterImg, hunter.x - hunter.size, hunter.y - hunter.size, hunter.size * 2, hunter.size * 2);
-      }
+      for (let kid of kids) ctx.drawImage(kidImg, kid.x - kid.size, kid.y - kid.size, kid.size * 2, kid.size * 2);
+      for (let hunter of hunters) ctx.drawImage(hunterImg, hunter.x - hunter.size, hunter.y - hunter.size, hunter.size * 2, hunter.size * 2);
     }
 
     function playScream() {
@@ -183,7 +212,6 @@
 
     let imagesLoaded = 0;
     const totalImages = 3;
-
     [lloronaImg, kidImg, hunterImg].forEach(img => {
       img.onload = () => {
         imagesLoaded++;
